@@ -1,0 +1,187 @@
+:- dynamic detailed_mode_disabled/0.
+:- ensure_loaded('files.pl').
+% student file for Ultimate Tic Tac Toe implementation
+
+% initialState/1
+% initialState(-State)
+% Este adevărat pentru starea inițială a jocului.
+initialState(S) :- S=([
+                       ['','','','','','','','',''],
+                       ['','','','','','','','',''],
+                       ['','','','','','','','',''],
+                       ['','','','','','','','',''],
+                       ['','','','','','','','',''],
+                       ['','','','','','','','',''],
+                       ['','','','','','','','',''],
+                       ['','','','','','','','',''],
+                       ['','','','','','','','','']
+                     ], -).
+
+% getBoards/2
+% getBoards(+State, -Boards)
+% Este adevărat dacă în starea State, informațiile din tablele individuale sunt
+% cele din variabila Boards.
+% Boards este legată la o listă de 9 elemente, fiecare element reprezentând o tablă.
+% Ordinea tablelor este cea din lista positions (din utils.pl).
+% Fiecare element din listă este o listă de 9 elemente, reprezentând
+% pozițiile de pe tablă, ca x, 0, sau ''.
+% Pozițiile sunt în ordinea din lista positions (din utils.pl).
+getBoards((S,_), S).
+
+% getBoard/3
+% getBoard(+State, +UPos, -Board)
+% Este adevărat dacă în starea State, la poziția UPos din tabla de UTTT,
+% se află tabla individuală cu reprezentarea din Board.
+% Reprezentarea tablei este descrisă în predicatul getBoards/2.
+getBoard((S, _), Pos, B) :- positions(P), nth0(Rez, P, Pos), nth0(Rez, S, B).
+
+% getUBoard/2
+% getUBoard(stare(+Board, +UboardState, +Player, +NextMoves),
+% -UboardState)
+% Întoarce reprezentarea UBoard-ului, indicând tablele individuale câștigate,
+% remizate, sau încă în desfășurare. Reprezentarea este aceeași ca a tablelor
+% individuale (vezi getBoards/2).
+getResB(B, R) :- (player_wins(0, B) -> R = 0; (player_wins(x, B) -> R = x ; (member('', B) -> R = ''; R = r))).
+getUBoard(([],_),[]).
+getUBoard(([H|T],_), [R|Ub]) :- getResB(H, R), getUBoard((T,_), Ub).
+
+% getPos/4
+% getPos(+State, +UPos, +Pos, -Cell).
+% Este adevărat dacă în starea State, în tabla individuală de la poziția UPos în UBoard,
+% la poziția Pos pe tablă, se află simbolul Cell (x, 0, sau '').
+getPos((S, _), UPos, Pos, Cell) :- positions(P), nth0(URez, P, UPos), nth0(Rez, P, Pos), nth0(URez, S, I), nth0(Rez, I, Cell).
+
+% getPos/3
+% getPos(+Board, +Pos, -Cell).
+% Este adevărat dacă în tabla individuală reprezentată în Board, la poziția Pos,
+% se află simbolul Cell (x, 0, sau ''). Predicatul poate fi folosit și pentru UBoard, caz
+% în care Cell poate fi și r.
+getPos(B, Pos, Cell) :- positions(P), nth0(Rez, P, Pos), nth0(Rez, B,Cell).
+
+% getNextPlayer/2
+% getNextPlayer(+State), -NextPlayer)
+% Este adevărat dacă în starea State, jucătorul care urmează este NextPlayer
+% (poate fi x sau 0)..
+countOccurencesB(B, K, P) :- include(=(P), B, L2), length(L2, K).
+countOccurencesUB([], 0, _).
+countOccurencesUB([H|T], K, P) :- countOccurencesUB(T, R, P), countOccurencesB(H, S, P), K is S + R.
+getNextPlayer((S, _), NP) :- countOccurencesUB(S, R1, x),countOccurencesUB(S, R2, 0), ( R1 is R2 -> NP = x ; NP = 0).
+
+% getNextAvailableBoards/2
+% getNextAvailableBoards(+State, -NextBoardsPoss)
+% Este adevărat dacă în starea State, pozițiile din NextBoardsPoss sunt pozițiile
+% din UBoard ale tablelor disponibile pentru următoarea mutare.
+getUncompletedBoards([], [], Aux, Rez) :- reverse(Aux, Rez).
+getUncompletedBoards([H|T], [HP|TP] ,Aux, Rez) :- (H == '' -> getUncompletedBoards(T, TP, [HP|Aux], Rez); getUncompletedBoards(T, TP, Aux, Rez)).
+getNextAvailableBoards((S, X), NB) :- getUBoard((S, X), UB), \+ player_wins(_, UB), positions(P), getUncompletedBoards(UB, P, [], Aux), (member(X, Aux) -> NB = [X]; NB = Aux).
+
+% getBoardResult/2
+% getBoardResult(+Board, -Result)
+% Este adevărat dacă pentru o tablă individuală (sau UBoard) cu reprezentarea
+% din Board, rezultatul este Result. Result poate fi:
+% x sau 0, dacă jucătorul respectiv a câștigat jocul pe tabla dată;
+% r, dacă s-a ajuns la remiză (toate pozițiile au fost completate dar
+% tabla nu a fost câștigată);
+% '', dacă tabla nu a fost câștigată și nu s-au completat toate pozițiile.
+% NOTĂ: este deja definit predicatul player_wins/2 în utils.pl.
+getBoardResult([H|T], R) :- (is_list(H) -> getUBoard(([H|T], _), BR), getResB(BR, R); getResB([H|T], R)).
+
+% buildState/3
+% buildState(+Boards, +PreviousPos, -State)
+% Este adevărat dacă starea State corespunde stării jocului în care tablele
+% individuale sunt cele din lista Boards, iar ultima mutare a fost în
+% poziția PreviousPos într-o tablă individuală.
+% NOTĂ: nu contează în care tablă individuală s-a realizat ultima mutare.
+buildState(B, PP, S) :- S = (B, PP).
+
+% validMove/2
+% validMove(+State, +Move)
+% Este adevărat dacă mutarea Move este legală în starea State.
+% Move este fie o poziție, în cazul în care este o singură tablă disponibilă
+% pentru a următoarea mutare din starea State, fie o pereche de poziții, altfel.
+validMove(S, M) :- positions(P), member(M, P), getNextAvailableBoards(S, B), length(B, 1), nth0(0, B, R), getPos(S, R, M, '').
+validMove(S, (M1, M2)) :- positions(P), member(M1, P), member(M2, P), getNextAvailableBoards(S, B), length(B, L), L > 1, member(M1, B), getPos(S, M1, M2, '').
+
+% makeMove/3
+% makeMove(+State, +Move, -NewState)
+% Este adevărat dacă în urma aplicării mutării Move în starea State
+% rezulta starea NewState.
+% Move este fie o poziție (din lista positions), în cazul în care nu sunt mai
+% multe table disponibile pentru a următoarea mutare din starea State,
+% fie o pereche de poziții, altfel.
+%
+% Hint: folosiți validMove pentru a verifica mutarea și buildState pentru a construi o stare.
+replace(I, L, E, K) :- nth0(I, L, _, R), nth0(I, K, E, R).
+makeMove((B, LM), M, NS) :- validMove((B, LM), M), getNextAvailableBoards((B, LM), [UM]), positions(P), nth0(UI, P, UM), nth0(I, P, M), getBoard((B, LM), UM, SB), getNextPlayer((B, LM), PL),replace(I, SB, PL, NB), replace(UI, B, NB, LB), buildState(LB, M, NS), !.
+makeMove((B, LM),(M1, M2), NS) :- validMove((B, LM), (M1, M2)), positions(P), nth0(I1, P, M1), nth0(I2, P, M2), getBoard((B, LM), M1, SB), getNextPlayer((B, LM), PL), replace(I2, SB, PL, NB), replace(I1, B, NB, Aux), buildState(Aux, M2, NS), !.
+
+% dummy_first/2
+% dummy_first(+State, -NextMove)
+% Predicatul leagă NextMove la următoarea mutare pentru starea State.
+% Strategia este foarte simplă: va fi aleasă cea mai din stânga-sus mutare posibilă
+% (prima din lista de poziții disponibile).
+dummy_first(S, NM) :- getNextAvailableBoards(S, L), length(L, R), nth0(0, L, F), (R is 1 -> getBoard(S, F, B), getPos(B, NM, '')
+                                                                                 ; getBoard(S, F, UB), getPos(UB, FS, ''), NM=(F, FS)), !.
+
+% dummy_last/2
+% dummy_last(+State, -NextMove)
+% Predicatul leagă NextMove la următoarea mutare pentru starea State.
+% Strategia este foarte simplă: va fi aleasă cea mai din dreapta-jos mutare posibilă
+% (ultima din lista de poziții disponibile).
+dummy_last(S, NM) :- getNextAvailableBoards(S, Aux), reverse(Aux, L), length(L, R), nth0(0, L, F), positions(P),
+                                                                                 (R is 1 -> getBoard(S, F, AB), reverse(AB, B), getPos(B, FAux, ''), nth0(PAux, P, FAux), D is 8 - PAux,
+                                                                                  nth0(D, P, NM)
+                                                                                 ; getBoard(S, F, AUB), reverse(AUB, UB), getPos(UB, FS, ''), nth0(UP, P, FS), C is 8 - UP,
+                                                                                   nth0(C, P, FF), NM=(F, FF)), !.
+
+
+% ======== Etapa 2
+
+% movePriority/4
+% movePriority(+Player, +Board, +Move, -Priority)
+% Calculează prioritatea mutării Move pentru jucătorul Player, într-o
+% tablă individuală Board. Vezi enunț.
+makeMoveSingleTable(B, M, Pl, NB) :- positions(P), nth0(Pos, P, M), replace(Pos, B, Pl, NB), !.
+movePriority(P, B, M, Prio) :- makeMoveSingleTable(B, M, P, NB1), player_wins(P, NB1), Prio is 0, !; nextPlayer(P, NP), makeMoveSingleTable(B, M, NP, NB2), player_wins(NP, NB2), Prio is 1, !; empty_board(EB), B == EB, member(M, [nw, ne, sw, se]), Prio is 2, !; \+ member(P, B), nth0(4, B, 0), member(M, [nw, ne, sw, se]), Prio is 3, !; \+ member(P, B), nth0(4, B, ''), M == c, Prio is 3, !; makeMoveSingleTable(B, M, P, NB2),positions(Poss), findall(X, (member(X, Poss), nth0(I, Poss, X), nth0(I, NB2, '')), VP), findall(Y, (member(Y, VP), makeMoveSingleTable(NB2, Y, P, NB3), player_wins(P, NB3)), LA), length(LA, Len), Len > 0, Prio is 4, !; member(M, [nw, ne, sw, se]), Prio is 5, !; Prio is 6, !.
+
+% bestIndividualMoves/3
+% bestIndividualMoves(+P, +Board, -Moves)
+% Leagă Moves la o listă cu toate mutările disponibile, în ordinea
+% priorității lor.
+%
+% Hint: construiți o listă de perechi (prioritate, mutare) și folosiți
+% sortMoves/2 pentru a obține lista de mutări, în ordinea priorității.
+getMovePrioPair(_, _, [], []).
+getMovePrioPair(P, B, [HPos|TPos], [Res|Rest]) :- getMovePrioPair(P, B, TPos, Rest), movePriority(P, B, HPos, Prio), Res = (Prio, HPos), !.
+bestIndividualMoves(P, B, M) :- positions(Paux), findall(X, (member(X, Paux), getPos(B, X, '')), Pos), getMovePrioPair(P, B, Pos, Res), sortMoves(Res, M), !.
+
+% narrowGreedy/2
+% narrowGreedy(+State, -Move)
+% Strategie care întotdeauna ia cea mai bună mutare individuală.
+% Dacă sunt mai multe table disponibile, ia tabla care este cea mai bună
+% mutare individuală în raport cu U-board.
+narrowGreedy(S, M) :- getNextAvailableBoards(S, Boards), length(Boards, L), getNextPlayer(S, P), (L is 1 -> [Move] = Boards, getBoard(S, Move, B), bestIndividualMoves(P, B, [M|_]); getUBoard(S, UB), bestIndividualMoves(P, UB, [UM|_]), getBoard(S, UM, NB), bestIndividualMoves(P, NB, [MM|_]), M = (UM, MM)), !.
+
+
+% bestMoves/2
+% bestMoves(+State, -Moves)
+% Leagă Moves la o listă care conține toate mutările disponibile, în
+% ordinea priorității lor, după ordonarea prezentată în enunț.
+
+globalPriority(P, NP, S, NS, M, Prio) :- getUBoard(NS, UB), getBoardResult(UB, P), Prio is 0, !;
+                                         getBoard(NS, M, B1), \+ member(NP, B1), Prio is 1, !;
+                                         getBoard(NS, M, B2), countOccurencesB(B2, 1, NP), Prio is 2, !;
+                                         getBoard(NS, M, B3), \+ player_wins(NP, B3), \+ movePriority(P, B3, _, 0), countOccurencesB(B3, K, NP), K >= 2, countOccurencesB(B3, KP, P), Prio is 10-KP, !;
+                                         getBoard(NS, M, B4), movePriority(P, B4, _, 0), Prio is 12, !;
+                                         getUBoard(NS, UB1), getNextAvailableBoards(S, AB), movePriority(NP, UB1, WM, 0), member(WM, AB), getBoard(NS, WM, B5), movePriority(NP, B5, WM1, 0), getBoard(NS, WM1, B6), (movePriority(P, B6, _, 0) -> Prio is 13, !; \+ getBoardResult(B6, ''), Prio is 13, !);
+                                         getUBoard(NS, UB2), getNextAvailableBoards(S, AB1), movePriority(NP, UB2, WM2, 0), member(WM2, AB1), getBoard(NS, WM2, B7), movePriority(NP, B7, WM3, 0), getBoard(NS, WM3, B8), \+ movePriority(P, B8, _, 0), Prio is 14, !;
+                                         getBoard(NS, M, B9), \+ getBoardResult(B9, ''), Prio is 15, !;
+                                         getBoard(NS, M, B10), movePriority(NP, B10, _, 0), getUBoard(NS, UB3), movePriority(NP, UB3, M, 0), Prio is 16, !;
+                                         Prio is 11, !.
+
+bestMoves(S, M) :- getNextAvailableBoards(S, Moves), getNextPlayer(S, P), length(Moves, L), (L is 1 -> [K]= Moves, getBoard(S, K, B), bestIndividualMoves(P, B, Sort1), findall((Prios, Y), (member(Y, Sort1), nextPlayer(P, NP), makeMove(S, Y, NS), globalPriority(P, NP, S, NS, Y, Prios)), GP), sortMoves(GP, M) ; false).
+% greedy/2
+% greedy(+State, -Move)
+% Strategie care alege cea mai bună mutare, bazat pe rezultatul lui
+% bestMoves/2.
+greedy(S, M) :- bestMoves(S, [M|_]).
